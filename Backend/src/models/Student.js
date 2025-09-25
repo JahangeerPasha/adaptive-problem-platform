@@ -1,4 +1,3 @@
-// Backend/models/Student.js
 const mongoose = require('mongoose');
 
 const studentSchema = new mongoose.Schema({
@@ -24,6 +23,13 @@ const studentSchema = new mongoose.Schema({
       },
     ],
   },
+  performanceHistory: [
+    {
+      problemId: { type: mongoose.Schema.Types.ObjectId, ref: 'Problem' },
+      correct: Boolean,
+      timestamp: Date,
+    },
+  ],
 }, { timestamps: true });
 
 module.exports = mongoose.model('Student', studentSchema);
