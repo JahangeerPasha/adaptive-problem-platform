@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Problem = require('../models/Problem');
 const Student = require('../models/Student');
+const Attempt = require('../models/Attempt');
 
 // POST /api/problems → Add new problem
 router.post('/', async (req, res) => {
@@ -27,32 +28,50 @@ router.get('/', async (req, res) => {
 // GET /api/problems/adaptive/:studentId → Recommend based on performance
 router.get('/adaptive/:studentId', async (req, res) => {
   try {
-    console.log("Received request for studentId:", req.params.studentId);
-
-    const student = await Student.findById(req.params.studentId);
-    console.log("Fetched student:", student);
-
+    const studentId = req.params.studentId;
+    const student = await Student.findById(studentId);
     if (!student) return res.status(404).json({ error: 'Student not found' });
 
     const total = student.performanceHistory.length;
     const correct = student.performanceHistory.filter(p => p.correct).length;
     const successRate = total ? correct / total : 0;
 
-    console.log("Success rate:", successRate);
-
     let difficulty = 'easy';
     if (successRate > 0.7) difficulty = 'hard';
     else if (successRate > 0.4) difficulty = 'medium';
 
-    const problem = await Problem.findOne({ difficulty });
-    console.log("Recommended problem:", problem);
+    const solvedIds = await Attempt.find({ studentId, correct: true }).distinct('problemId');
+    const unsolved = await Problem.find({ difficulty, _id: { $nin: solvedIds } });
 
-    if (!problem) return res.status(404).json({ error: 'No matching problem found' });
+    if (unsolved.length === 0) {
+      return res.status(200).json({ message: 'All problems solved at this level!' });
+    }
 
-    res.json({ recommended: problem });
+    const recommended = unsolved[Math.floor(Math.random() * unsolved.length)];
+    await Problem.findByIdAndUpdate(recommended._id, { $inc: { 'metrics.views': 1 } });
+
+    res.json({ recommended });
   } catch (err) {
-    console.error("Error in adaptive route:", err);
     res.status(500).json({ error: 'Failed to fetch adaptive problem' });
+  }
+});
+
+// POST /api/problems/attempts → Record a solved attempt
+router.post('/attempts', async (req, res) => {
+  try {
+    const { studentId, problemId, correct } = req.body;
+
+    const attempt = new Attempt({
+      studentId,
+      problemId,
+      correct,
+      timestamp: new Date()
+    });
+
+    await attempt.save();
+    res.status(201).json({ message: 'Attempt recorded', attempt });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to record attempt' });
   }
 });
 
